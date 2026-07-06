@@ -17,6 +17,7 @@ import os
 from typing import Any
 
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 DEFAULT_BASE_URL = "https://api.concentrate.ai/v1"
 DEFAULT_MODEL = "gpt-5.4"
@@ -82,9 +83,7 @@ class ChatConcentrate(ChatOpenAI):
         """Initialize the model. Overrides base-URL and forces Responses API."""
         resolved_key = api_key or os.environ.get("CONCENTRATE_API_KEY")
         resolved_base_url = (
-            base_url
-            or os.environ.get("CONCENTRATE_BASE_URL")
-            or DEFAULT_BASE_URL
+            base_url or os.environ.get("CONCENTRATE_BASE_URL") or DEFAULT_BASE_URL
         )
 
         if routing is not None:
@@ -98,7 +97,7 @@ class ChatConcentrate(ChatOpenAI):
 
         super().__init__(
             model=model,
-            api_key=resolved_key,
+            api_key=SecretStr(resolved_key) if resolved_key is not None else None,
             base_url=resolved_base_url,
             **kwargs,
         )
