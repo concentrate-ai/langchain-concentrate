@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import BaseModel
 
 from langchain_concentrate import ChatConcentrate
 from langchain_concentrate.chat_models import DEFAULT_BASE_URL, DEFAULT_MODEL
@@ -78,3 +79,30 @@ def test_lc_namespace() -> None:
         "langchain_concentrate",
         "chat_models",
     ]
+
+
+def test_bind_tools_registers_tool_schema(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`bind_tools` should attach the tool schema without any network call."""
+    monkeypatch.setenv("CONCENTRATE_API_KEY", "k")
+
+    def get_weather(city: str) -> str:
+        """Get the weather for a city."""
+        return f"sunny in {city}"
+
+    bound = ChatConcentrate().bind_tools([get_weather])
+    tools = bound.kwargs.get("tools", [])
+    names = {(t.get("function") or t).get("name") for t in tools if isinstance(t, dict)}
+    assert "get_weather" in names
+
+
+def test_with_structured_output_returns_runnable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`with_structured_output` should build a runnable pipeline offline."""
+    monkeypatch.setenv("CONCENTRATE_API_KEY", "k")
+
+    class Answer(BaseModel):
+        number: int
+
+    structured = ChatConcentrate().with_structured_output(Answer)
+    assert hasattr(structured, "invoke")
