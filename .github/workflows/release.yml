@@ -1,0 +1,92 @@
+name: Release
+
+# Publish the package via PyPI Trusted Publishing (OIDC) — no stored tokens.
+#
+# Flow:
+#   1. Manually dispatch with target=testpypi to rehearse on TestPyPI.
+#   2. Verify `pip install -i https://test.pypi.org/simple/ langchain-concentrate`.
+#   3. Push a version tag (e.g. `v0.1.0`) OR dispatch with target=pypi to publish
+#      for real.
+#
+# Prerequisites (one-time, done in the PyPI/TestPyPI web UI under the project's
+# "Publishing" settings — "Add a trusted publisher"):
+#   - Owner:            concentrate-ai
+#   - Repository:       langchain-concentrate
+#   - Workflow name:    release.yml
+#   - Environment:      pypi   (and `testpypi` on TestPyPI)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Index to publish to"
+        required: true
+        default: testpypi
+        type: choice
+        options:
+          - testpypi
+          - pypi
+
+env:
+  UV_NO_SOURCES: "1"
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Build sdist and wheel
+        run: uv build
+      - name: Check artifacts
+        run: uvx twine check dist/*
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: build
+    # Tag pushes and explicit testpypi dispatches both rehearse on TestPyPI.
+    if: >-
+      github.event_name == 'push' ||
+      github.event.inputs.target == 'testpypi'
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write # required for Trusted Publishing (OIDC)
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@v1.14.0
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build
+    # Only a manual dispatch explicitly targeting pypi publishes for real.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.target == 'pypi'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # required for Trusted Publishing (OIDC)
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.14.0
